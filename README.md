@@ -6,6 +6,31 @@ NEO understands from the moment you install it that you are writing *books* and 
 
 NEO runs locally. WIPs are saved in plain files on your disk. No accounts or subscriptions. And it's free!
 
+## What makes NEO-Delta different
+
+NEO-Delta is a fork of [Hugh Howey's NEO](https://github.com/hughhowey/neo), built on NEO 1.6.1. Everything in NEO is here, plus:
+
+**Lead-in paragraphs** 
+
+Some chapters open with a line before the story starts: *Ten years earlier*, a place and date, or a letter that runs a few lines into each chapter of Part One. A lead-in sits between the chapter heading and the story, set in italics with no indent, and the drop cap moves down to the story's first paragraph where it belongs.
+
+Turn on **File → Show More Features**, then:
+
+- **⌥⌘Return** (Ctrl+Alt+Enter on Windows) in a chapter heading starts a lead-in under it.
+- **Shift+Return** inside a lead-in adds another lead-in line; **Return** steps back into the story.
+- **Backspace** at the start of a lead-in turns it back into an ordinary paragraph.
+- **Format → Lead-in Paragraph** turns any paragraph into a lead-in, or back.
+
+Lead-ins carry through every export: PDF, the KDP paperback, EPUB, Word (as a "Lead-in" style you can restyle) and standard manuscript format.
+
+**Its own icon and its own updates** 
+
+NEO-Delta has its own app icon, and installed copies update from this repository's releases instead of the main NEO's, so an update never swaps NEO-Delta out for a version without these features. It uses the same library folder as NEO, so your books are already there when you switch.
+
+**Unsigned builds** 
+
+The main NEO's builds are signed with Hugh's Apple certificate; NEO-Delta's aren't. On a Mac, right-click NEO and choose Open the first time. On Windows, SmartScreen warns about an unknown publisher the first time: choose More info → Run anyway.
+
 ## Download
 
 Get the latest installer from the **[Releases page](../../releases)**:
