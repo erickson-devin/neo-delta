@@ -1,4 +1,4 @@
-# NEO
+# NEO-Delta
 
 **A distraction-free word processor for authors, by a wannabe author.**
 
