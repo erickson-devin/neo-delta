@@ -89,7 +89,11 @@ jobs:
 
   mac:
     needs: version
-    runs-on: macos-latest
+    # Intel macOS: the Apple Silicon pool (macos-latest) can sit queued until
+    # GitHub gives up on the job. electron-builder makes both arm64 and x64
+    # builds from either.
+    runs-on: macos-15-intel
+    timeout-minutes: 45
     # a fork without Apple's certificates still builds, just unsigned
     env:
       HAS_CERT: ${{ secrets.CSC_LINK != '' }}
@@ -125,11 +129,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         if: env.HAS_CERT == 'true'
         run: npx electron-builder --mac --publish never
-      - name: Build unsigned
+      # ad-hoc signed, not left unsigned: Apple Silicon calls an unsigned
+      # download "damaged", but opens an ad-hoc one after right-click → Open
+      - name: Build unsigned (ad-hoc signed)
         if: env.HAS_CERT != 'true'
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --mac --publish never -c.mac.notarize=false
+        run: npx electron-builder --mac --publish never -c.mac.notarize=false -c.mac.identity=-
       - uses: actions/upload-artifact@v4
         with:
           name: mac-build
