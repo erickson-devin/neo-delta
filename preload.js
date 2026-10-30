@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('neo', {
 
   poetryState: (on) => ipcRenderer.send('poetry:state', on),
   flushState: (on) => ipcRenderer.send('flush:state', on),
+  leadInState: (on) => ipcRenderer.send('leadin:state', on),
   scriptState: (st) => ipcRenderer.send('script:state', st),
   printPaperback: (job) => ipcRenderer.invoke('print:paperback', job),
   printManuscript: (job) => ipcRenderer.invoke('print:manuscript', job), // File → Export → Manuscript Format… as a PDF

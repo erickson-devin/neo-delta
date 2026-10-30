@@ -2640,6 +2640,10 @@ function renderChapters() {
           e.preventDefault();
           titleSpan.blur();
           poetryUnderHeading(sec.querySelector('.chapter-body'), chId);
+        } else if (e.key === 'Enter' && e.altKey && (e.metaKey || e.ctrlKey) && moreOn()) {
+          e.preventDefault();
+          titleSpan.blur();
+          poetryUnderHeading(sec.querySelector('.chapter-body'), chId, 'lead-in');
         } else if (e.key === 'Enter') { e.preventDefault(); titleSpan.blur(); }
         e.stopPropagation();
       });
@@ -3014,6 +3018,7 @@ function wireChapterBody(body, chId) {
       smartKeys(e, body);
       return;
     }
+    if (handleLeadIn(e, body, chId)) return;
     if (handlePoetry(e, body, chId)) return;
     if (handleFlush(e, body, chId)) return;
     if (poetryBackspace(e, body, chId)) return;
@@ -3055,7 +3060,7 @@ function wireChapterBody(body, chId) {
     if (e.inputType !== 'insertLineBreak' || e.defaultPrevented) return;
     if (isScript()) { e.preventDefault(); return; } // a script's lines are its elements
     const key = { key: 'Enter', shiftKey: true, metaKey: false, ctrlKey: false, altKey: false, preventDefault: () => e.preventDefault() };
-    if (!handlePoetry(key, body, chId)) handleFlush(key, body, chId);
+    if (!handleLeadIn(key, body, chId) && !handlePoetry(key, body, chId)) handleFlush(key, body, chId);
   });
   // the moment writing hits a ghost, it becomes prose
   // (it keeps its data-sec-id so the outline knows it's been written)
@@ -3775,13 +3780,13 @@ function handleEnter(e, body, chId) {
   if (block.classList.contains('scene-break')) { e.preventDefault(); return true; } // Enter on a *** line: nothing
   // Enter in a poetry paragraph steps back into prose: an empty line becomes
   // an ordinary paragraph in place; otherwise the line splits and the new
-  // paragraph is plain (⇧Enter is how the poem continues)
-  if (block.classList.contains('poetry') || block.classList.contains('flush')) {
+  // paragraph is plain (⇧Enter is how the poem continues). A lead-in the same.
+  if (block.matches('.poetry, .flush, .lead-in')) {
     e.preventDefault();
     enterRun = 0;
     if (block.textContent.trim() === '') {
       snapshotStructure('poetry paragraph to prose');
-      block.classList.remove('poetry', 'flush');
+      block.classList.remove('poetry', 'flush', 'lead-in');
       romanize(block);
       placeCaret(block, 0);
       syncChapter(body, chId);
@@ -3789,11 +3794,11 @@ function handleEnter(e, body, chId) {
       breakRun++;
       return true;
     }
-    const wasPoetry = block.classList.contains('poetry');
+    const wasPoetry = block.matches('.poetry, .lead-in');
     document.execCommand('insertParagraph');
     const cur = caretBlock(body);
     if (cur && cur !== block) {
-      cur.classList.remove('poetry', 'flush');
+      cur.classList.remove('poetry', 'flush', 'lead-in');
       if (wasPoetry) romanize(cur);
       placeCaret(cur, 0);
     }
@@ -3998,13 +4003,80 @@ function handlePoetry(e, body, chId) {
   const atStart = after.length === block.textContent.length;
   if (empty || atStart) {
     // an empty paragraph, or the caret at its very start: the whole paragraph turns to poetry
-    block.classList.remove('flush');
+    block.classList.remove('flush', 'lead-in');
     block.classList.add('poetry');
     italicize(block);
     caretIntoStart(block);
   } else {
     const line = document.createElement('p');
     line.className = 'poetry';
+    if (after.trim() !== '') {
+      line.appendChild(tail.extractContents());
+      for (const junk of line.querySelectorAll('br')) junk.remove();
+      if (!block.textContent.trim()) block.innerHTML = '<br>';
+    }
+    italicize(line);
+    block.after(line);
+    caretIntoStart(line);
+  }
+  syncChapter(body, chId);
+  resetNativeUndo();
+  breakRun++;
+  return true;
+}
+
+// A lead-in is what stands between a chapter's heading and its story: "Ten
+// years earlier", a place and a date, a page of a letter. Italic, set flush,
+// and passed over by the drop cap, which waits for the story's first words.
+// ⌥⌘Enter (Ctrl+Alt+Enter) makes one the way ⌘⇧Enter makes poetry: at the
+// end of a paragraph, a new one beneath it; mid-paragraph, the text after
+// the caret; at the start (or in an empty one), the whole paragraph. Inside
+// a lead-in, ⇧Enter or ⌥⌘Enter: another paragraph of it. Enter steps out.
+function handleLeadIn(e, body, chId) {
+  if (e.key !== 'Enter') return false;
+  const mod = (e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey;
+  const more = e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey;
+  if (!mod && !more) return false;
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !sel.isCollapsed) return false;
+  const block = caretBlock(body);
+  if (!block) return false;
+  if (!mod && !block.classList.contains('lead-in')) return false; // ⇧Enter elsewhere: poetry or flush
+  e.preventDefault();
+  // a new lead-in is behind Show More Features; one already there goes on
+  if (!moreOn() && !block.classList.contains('lead-in')) return true;
+  if (block.classList.contains('scene-break')) return true;
+  if (block.querySelector('span:not(.ph-mark):not(.fn)')) stripJunkSpans(block);
+
+  if (block.classList.contains('lead-in')) {
+    // the engine's own split keeps the class on the new line, and ⌘Z sees it
+    document.execCommand('insertParagraph');
+    const cur = caretBlock(body);
+    if (cur) {
+      cur.classList.add('lead-in');
+      if (cur.textContent.trim() === '' && !cur.querySelector('i')) { italicize(cur); caretIntoStart(cur); }
+    }
+    syncChapter(body, chId);
+    return true;
+  }
+
+  snapshotStructure('lead-in paragraph');
+  const r = sel.getRangeAt(0);
+  const tail = document.createRange();
+  tail.selectNodeContents(block);
+  try { tail.setStart(r.startContainer, r.startOffset); } catch { return true; }
+  const after = tail.toString();
+  const empty = block.textContent.trim() === '';
+  const atStart = after.length === block.textContent.length;
+  if (empty || atStart) {
+    if (block.classList.contains('poetry')) romanize(block);
+    block.classList.remove('poetry', 'flush');
+    block.classList.add('lead-in');
+    italicize(block);
+    caretIntoStart(block);
+  } else {
+    const line = document.createElement('p');
+    line.className = 'lead-in';
     if (after.trim() !== '') {
       line.appendChild(tail.extractContents());
       for (const junk of line.querySelectorAll('br')) junk.remove();
@@ -4067,7 +4139,7 @@ function poetryBackspace(e, body, chId) {
   const sel = window.getSelection();
   if (!sel.rangeCount || !sel.isCollapsed) return false;
   const block = caretBlock(body);
-  if (!block || !(block.classList.contains('poetry') || block.classList.contains('flush'))) return false;
+  if (!block || !block.matches('.poetry, .flush, .lead-in')) return false;
   const r = sel.getRangeAt(0);
   const head = document.createRange();
   head.selectNodeContents(block);
@@ -4075,8 +4147,8 @@ function poetryBackspace(e, body, chId) {
   if (head.toString().length !== 0) return false;
   e.preventDefault();
   snapshotStructure('poetry paragraph to prose');
-  if (block.classList.contains('poetry')) romanize(block);
-  block.classList.remove('poetry', 'flush');
+  if (block.matches('.poetry, .lead-in')) romanize(block);
+  block.classList.remove('poetry', 'flush', 'lead-in');
   placeCaret(block, 0);
   syncChapter(body, chId);
   resetNativeUndo();
@@ -4084,10 +4156,11 @@ function poetryBackspace(e, body, chId) {
   return true;
 }
 
-// Format → Poetry Paragraph / Flush Paragraph: toggles every paragraph the
-// selection touches (a paragraph is one or the other, or plain prose)
+// Format → Poetry / Flush / Lead-in Paragraph: toggles every paragraph the
+// selection touches (a paragraph is one of them, or plain prose)
 function togglePoetry() { toggleParaKind('poetry'); }
 function toggleFlush() { toggleParaKind('flush'); }
+function toggleLeadIn() { toggleParaKind('lead-in'); }
 function toggleParaKind(kind) {
   const sel = window.getSelection();
   if (!sel.rangeCount) { toast(t('Click into a paragraph first')); return; }
@@ -4104,11 +4177,13 @@ function toggleParaKind(kind) {
   snapshotStructure(kind + ' paragraph');
   const on = !ps.every((p) => p.classList.contains(kind));
   for (const p of ps) {
-    const wasPoetry = p.classList.contains('poetry');
-    p.classList.remove('poetry', 'flush');
+    // poetry and lead-ins are born italic, and shed it going anywhere else
+    const wasItalic = p.matches('.poetry, .lead-in');
+    p.classList.remove('poetry', 'flush', 'lead-in');
     if (on) p.classList.add(kind);
-    if (kind === 'poetry' && on) italicize(p);
-    else if (wasPoetry) romanize(p);
+    const nowItalic = on && (kind === 'poetry' || kind === 'lead-in');
+    if (wasItalic && !nowItalic) romanize(p);
+    else if (nowItalic) italicize(p);
   }
   caretIntoStart(ps[0]);
   syncChapter(body, chId);
@@ -4116,13 +4191,15 @@ function toggleParaKind(kind) {
   breakRun++;
 }
 
-// ⇧Enter from the chapter title: a poetry paragraph above the opening one
-function poetryUnderHeading(body, chId) {
+// ⌘⇧Enter from the chapter title: a poetry paragraph above the opening one.
+// ⌥⌘Enter: a lead-in, beneath any the chapter already opens with.
+function poetryUnderHeading(body, chId, kind = 'poetry') {
   const line = document.createElement('p');
-  line.className = 'poetry';
+  line.className = kind;
   italicize(line);
-  snapshotStructure('poetry paragraph');
-  body.prepend(line);
+  snapshotStructure(kind + ' paragraph');
+  const past = kind === 'lead-in' ? [...body.children].find((p) => !p.classList.contains('lead-in')) : body.firstChild;
+  if (past) past.before(line); else body.append(line);
   body.focus();
   caretIntoStart(line);
   syncChapter(body, chId);
@@ -4215,11 +4292,11 @@ function dropJunkSpans(html) {
 const OPENING_DASH = /^\s*[-‐‑‒–—―]/;
 // A chapter's opening paragraph — the one with the drop cap and no indent —
 // is its first paragraph with words in it, past a blank line or a *** at the
-// top (the exports skip those too). Poetry stands apart. In an empty
+// top (the exports skip those too). Poetry and lead-ins stand apart. In an empty
 // chapter it's the paragraph waiting for the first word. Marked data-first,
 // for the screen only.
 function openingPara(body) {
-  const ps = [...body.children].filter((p) => p.tagName === 'P' && !p.classList.contains('poetry') && !p.classList.contains('scene-break') && !p.classList.contains('ghost'));
+  const ps = [...body.children].filter((p) => p.tagName === 'P' && !p.matches('.poetry, .lead-in, .scene-break, .ghost'));
   return ps.find((p) => p.textContent.trim() !== '') || ps[0] || null;
 }
 function markDialogueOpening(body) {
@@ -4248,6 +4325,7 @@ let lastCaretPara = null;
 let capOffBody = null;
 let menuPoetryState = false;
 let menuFlushState = false;
+let menuLeadInState = false;
 document.addEventListener('selectionchange', () => {
   if (!book || currentTab !== 'manuscript') return;
   const sel = window.getSelection();
@@ -4286,6 +4364,11 @@ document.addEventListener('selectionchange', () => {
   if (inFlush !== menuFlushState && window.neo.flushState) {
     menuFlushState = inFlush;
     window.neo.flushState(inFlush);
+  }
+  const inLeadIn = !!(caretP && caretP.classList.contains('lead-in'));
+  if (inLeadIn !== menuLeadInState && window.neo.leadInState) {
+    menuLeadInState = inLeadIn;
+    window.neo.leadInState(inLeadIn);
   }
   const inFirst = caretP && caretP.parentElement &&
     caretP.hasAttribute('data-first');
@@ -5466,7 +5549,7 @@ function chapterAlign(html) {
   let best = null;
   for (const m of String(html || '').matchAll(/<p\b([^>]*)>([\s\S]*?)<\/p>/g)) {
     const cls = (/\bclass="([^"]*)"/.exec(m[1]) || [])[1] || '';
-    if (/(^|\s)(scene-break|ghost|poetry|flush|sp-[\w-]+)(\s|$)/.test(cls)) continue;
+    if (/(^|\s)(scene-break|ghost|poetry|flush|lead-in|sp-[\w-]+)(\s|$)/.test(cls)) continue;
     if (!m[2].replace(/<[^>]*>|&nbsp;|\s/g, '')) continue;
     let a = (/text-align:\s*([a-z]+)/.exec(m[1]) || [])[1] || '';
     if (!['center', 'right', 'justify'].includes(a)) a = '';
@@ -6051,7 +6134,7 @@ function spType(p) {
   return 'action';
 }
 function spSetClass(p, type) {
-  p.classList.remove(...SP_CLASSES, 'poetry', 'flush', 'scene-break', 'ghost');
+  p.classList.remove(...SP_CLASSES, 'poetry', 'flush', 'lead-in', 'scene-break', 'ghost');
   if (type !== 'action') p.classList.add('sp-' + type);
   if (!p.className) p.removeAttribute('class');
   spGuessed.delete(p);
@@ -13584,6 +13667,7 @@ function rejoinAtCaret() {
   if (prev.classList.contains('scene-break') || blk.classList.contains('scene-break')) return;
   if (prev.classList.contains('poetry') !== blk.classList.contains('poetry')) return;
   if (prev.classList.contains('flush') !== blk.classList.contains('flush')) return;
+  if (prev.classList.contains('lead-in') !== blk.classList.contains('lead-in')) return;
   const chId = body.closest('.chapter').dataset.id;
   const at = prev.textContent.length;
   if (blk.textContent.trim() === '') {
@@ -15451,6 +15535,7 @@ function bookShortcutSections() {
       [tk('Enter ×3'), tk('Start a new chapter')],
       [K('⇧Enter', 'Shift+Enter'), tk('A paragraph with no indent'), tk('Again for another; Enter goes back to prose.')],
       ...(more ? [[K('⌘⇧Enter', 'Ctrl+Shift+Enter'), tk('Start or continue a poetry paragraph'), tk('Also works from a chapter heading.')]] : []),
+      ...(more ? [[K('⌥⌘Enter', 'Ctrl+Alt+Enter'), tk('Start or continue a chapter lead-in'), tk('A line such as “Ten years earlier” before the story starts. Also works from a chapter heading.')]] : []),
       [KPH, tk('Insert a placeholder note')],
       ...(more ? [[KFN, tk('Add a footnote'), tk('Type the note, then Enter to go back to writing. Click its number to change it.')]] : []),
       [KDA, tk('Move selected text to Darlings')],
@@ -15611,8 +15696,9 @@ function parasFromHtml(html) {
   holder.querySelectorAll('.darling-anchor, .ph-mark, .ghost').forEach((n) => n.remove());
   return [...holder.querySelectorAll('p')].map((p) => {
     const sceneBreak = p.classList.contains('scene-break');
-    const poetry = p.classList.contains('poetry');
-    const flush = !poetry && p.classList.contains('flush');
+    const leadIn = p.classList.contains('lead-in');
+    const poetry = !leadIn && p.classList.contains('poetry');
+    const flush = !leadIn && !poetry && p.classList.contains('flush');
     const align = (p.style && p.style.textAlign) || '';
     const runs = paraRuns(p.innerHTML, true).filter((r) => r.text || r.fn !== undefined);
     const inner = runs.map((r) => runHtml(r)).join('');
@@ -15621,10 +15707,11 @@ function parasFromHtml(html) {
       sceneBreak,
       poetry,
       flush,
+      leadIn,
       text: (healStrayNbsp(p), p.innerText).trim(),
       runs,
       align,
-      html: `<p${poetry ? ' class="poetry"' : flush ? ' class="flush"' : ''}${align ? ` style="text-align:${align}"` : ''}>${inner}</p>`
+      html: `<p${leadIn ? ' class="lead-in"' : poetry ? ' class="poetry"' : flush ? ' class="flush"' : ''}${align ? ` style="text-align:${align}"` : ''}>${inner}</p>`
     };
   }).filter((p) => p.sceneBreak || p.text);
 }
@@ -15725,7 +15812,7 @@ function manuscriptSections() {
   const { sections } = exportChapters();
   return sections.filter((s) => s.kind === 'chapter' || s.kind === 'part' || s.kind === 'epigraph').map((s) => ({
     kind: s.kind, heading: s.heading || '', partTitle: s.partTitle || '',
-    paras: s.paras.map((p) => ({ sceneBreak: p.sceneBreak, poetry: p.poetry, flush: p.flush, align: p.align, runs: p.runs || [] })),
+    paras: s.paras.map((p) => ({ sceneBreak: p.sceneBreak, poetry: p.poetry, flush: p.flush || p.leadIn, align: p.align, runs: p.runs || [] })),
     words: s.paras.reduce((n, p) => n + (p.sceneBreak ? 0 : countWords(p.text || '')), 0)
   }));
 }
@@ -15965,6 +16052,8 @@ function buildPrintHtml(d, o) {
       if (p.sceneBreak) { afterBreak = true; return '<p class="brk">*&#8195;*&#8195;*</p>'; }
       const inner = atFoot(p.html.replace(/^<p[^>]*>|<\/p>$/g, ''), p);
       if (p.poetry) { afterBreak = false; return `<p class="poetry"${p.align ? ` style="text-align:${p.align}"` : ''}>${inner}</p>`; }
+      // a lead-in comes before the story: the opening paragraph is still to come
+      if (p.leadIn) { afterBreak = false; return `<p class="lead-in"${p.align ? ` style="text-align:${p.align}"` : ''}>${inner}</p>`; }
       const cls = ['hy'];
       if (first) cls.push('first');
       if (first && OPENING_DASH.test(p.text)) cls.push('dialogue');
@@ -16137,6 +16226,8 @@ ${cap ? `p.first:not(.dialogue)::first-letter { initial-letter: 2; -webkit-initi
 p.brk { text-align: center; margin: 0.7em 0; break-after: avoid; letter-spacing: 0.1em; }
 p.poetry { margin: 0.5em 1.5em; text-align: left; }
 p.poetry + p.poetry { margin-top: 0; }
+p.lead-in { text-align: left; text-indent: 0; margin: 0 0 0.35em; }
+p.lead-in + p:not(.lead-in) { margin-top: 1.1em; }
 .backpage p.hy { text-indent: 0; margin-bottom: 0.7em; }
 .also p { text-align: center; font-style: italic; margin: 0 0 0.45em; }
 .note .reach-hd { margin-top: 1.4em; text-align: center; letter-spacing: 0.18em; text-transform: uppercase; font-size: 0.85em; }
@@ -16441,7 +16532,7 @@ function buildHtml(data, opts = {}) {
     let afterBreak = false; // a story's line of speech after *** keeps its indent
     return paras.map((p) => {
       if (p.sceneBreak) { afterBreak = initial; return '<p class="brk">***</p>'; }
-      if (p.poetry) { afterBreak = false; return p.html; }
+      if (p.poetry || p.leadIn) { afterBreak = false; return p.html; }
       let html = p.html;
       if (first || afterBreak) {
         const h = document.createElement('div');
@@ -16562,6 +16653,8 @@ function buildHtml(data, opts = {}) {
   .chapter .brk, .brk { text-align: center; text-indent: 0 !important; letter-spacing: 8px; color: #888; margin: 2.5em 0; }
   .chapter p.poetry { text-indent: 0; margin: 0 2.5em; }
   .chapter p.flush { text-indent: 0 !important; }
+  .chapter p.lead-in { text-indent: 0; text-align: left; hyphens: manual; -webkit-hyphens: manual; margin: 0 0 0.35em; }
+  .chapter p.lead-in + p:not(.lead-in) { margin-top: 1.4em; }
   .chapter p:not(.poetry) + p.poetry, .chapter .hd + p.poetry { margin-top: 0.9em; }
   .chapter p.poetry + p:not(.poetry) { margin-top: 0.9em; }
   .chapter p.byline { text-align: center; margin: -24px 0 40px; letter-spacing: 3px; text-transform: uppercase; font-size: 10pt; color: #555; }
@@ -17010,6 +17103,7 @@ function docxEntriesOf(data) {
     for (const p of ch.paras) {
       if (p.sceneBreak) body.push(docxP([{ text: '***' }], { style: 'SceneBreak' }));
       else if (p.poetry) body.push(docxP(paraRuns(p.html), { style: 'Poetry', align: p.align === 'center' || p.align === 'right' ? p.align : '' }));
+      else if (p.leadIn) body.push(docxP(paraRuns(p.html), { style: 'LeadIn', align: p.align === 'center' || p.align === 'right' ? p.align : '' }));
       else if (p.align === 'center' || p.align === 'right') body.push(docxP(paraRuns(p.html), { style: 'BodyTextNoIndent', align: p.align }));
       else body.push(docxP(paraRuns(p.html), { style: p.flush ? 'BodyTextNoIndent' : 'BodyText' }));
     }
@@ -17033,6 +17127,7 @@ function docxEntriesOf(data) {
 ${para('BodyText', 'Body Text', '<w:ind w:firstLine="480"/>')}
 ${para('BodyTextNoIndent', 'Body Text No Indent', '', 'BodyText')}
 ${para('Poetry', 'Poetry', '<w:ind w:left="720" w:right="720"/>')}
+${para('LeadIn', 'Lead-in', '<w:spacing w:after="240"/>', 'BodyText')}
 ${para('SceneBreak', 'Scene Break', '<w:spacing w:before="240"/><w:jc w:val="center"/>', 'BodyText')}
 ${para('Title', 'Title', '<w:spacing w:before="3000"/><w:jc w:val="center"/>', 'Normal', '<w:b/><w:sz w:val="56"/>')}
 ${para('Subtitle', 'Subtitle', '<w:jc w:val="center"/>', 'Normal', '<w:i/><w:sz w:val="32"/>')}
@@ -17133,7 +17228,8 @@ ${ch.subtitle ? `<p class="sub">${escXml(ch.subtitle)}</p>` : ''}${ch.byline ? `
     const paras = ch.paras.map((p) => {
       if (p.sceneBreak) { first = true; return '<p class="brk">* * *</p>'; }
       const classes = [];
-      if (p.poetry) classes.push('poetry');
+      if (p.leadIn) classes.push('lead-in');
+      else if (p.poetry) classes.push('poetry');
       else if (p.flush) classes.push('flush');
       else if (first) {
         classes.push('first');
@@ -17142,7 +17238,7 @@ ${ch.subtitle ? `<p class="sub">${escXml(ch.subtitle)}</p>` : ''}${ch.byline ? `
       }
       if (p.align === 'center' || p.align === 'right') classes.push(p.align);
       const cls = classes.length ? ` class="${classes.join(' ')}"` : '';
-      if (!p.poetry) first = false;
+      if (!p.poetry && !p.leadIn) first = false;
       return `<p${cls}>${xhtmlRuns(p)}</p>`;
     }).join('\n');
     inner = `<section epub:type="${EPUB_TYPES[kind] || ch.role || 'chapter'}">${ch.heading ? `<h1>${escXml(ch.heading)}</h1>` : ''}${ch.byline ? `<p class="byline">${escXml(ch.byline)}</p>` : ''}
@@ -17273,6 +17369,8 @@ p.right { text-align: right; text-indent: 0; }
 p.brk { text-align: center; text-indent: 0; margin: 2.5em 0; letter-spacing: 0.5em; }
 p.poetry { text-indent: 0; margin: 0 2em; }
 p.flush { text-indent: 0 !important; }
+p.lead-in { text-indent: 0; text-align: left; -webkit-hyphens: manual; -epub-hyphens: manual; hyphens: manual; margin: 0 0 0.35em; }
+p.lead-in + p:not(.lead-in) { margin-top: 1.4em; }
 p:not(.poetry) + p.poetry, h1 + p.poetry { margin-top: 0.9em; }
 p.poetry + p:not(.poetry) { margin-top: 0.9em; }
 p.byline { text-align: center; text-indent: 0; letter-spacing: 0.2em; text-transform: uppercase; font-size: 0.8em; margin: -1em 0 2em; }
@@ -17946,6 +18044,7 @@ window.neo.onMenu(async (msg) => {
   }
   if (msg.type === 'poetry' && !(book && isScript())) togglePoetry();
   if (msg.type === 'flush' && !(book && isScript())) toggleFlush();
+  if (msg.type === 'leadIn' && !(book && isScript())) toggleLeadIn();
   if (msg.type === 'uiLanguage') {
     // save every open page, then reload the window in the new language
     flushAllSaves();

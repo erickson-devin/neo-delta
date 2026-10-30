@@ -88,6 +88,14 @@ describe('Format menu: the paragraph kinds show their keys as shortcuts', () => 
       assert.equal(poetry.registerAccelerator, false);
     });
 
+    test(`Lead-in Paragraph carries ⌥⌘Enter (Ctrl+Alt+Enter), shown not registered (${platform})`, () => {
+      const leadIn = item(format(menuOn(platform)), 'Lead-in Paragraph');
+      assert.ok(leadIn);
+      assert.equal(leadIn.accelerator, 'CmdOrCtrl+Alt+Enter');
+      assert.equal(leadIn.registerAccelerator, false);
+      assert.ok(!item(format(menuOn(platform, { more: false })), 'Lead-in Paragraph'), 'behind Show More Features');
+    });
+
     test(`a script's elements carry ⌘1–⌘7 (Ctrl+1–7), shown not registered (${platform})`, () => {
       const items = format(menuOn(platform, { script: true }));
       const elements = ['Scene Heading', 'Action', 'Character', 'Parenthetical', 'Dialogue', 'Transition', 'Shot'];
@@ -128,6 +136,15 @@ describe('Format menu: the paragraph kinds show their keys as shortcuts', () => 
       assert.deepEqual(template.sent, ['flush', 'poetry'], 'the page already answered ⇧Enter and ⌘⇧Enter');
       // the menu is drawn again, so a tick the press flipped is put back
       assert.equal(template.builds(), before + 2);
+    });
+
+    test(`Lead-in Paragraph runs from the menu; its own keys are the page's (${platform})`, () => {
+      const template = menuOn(platform);
+      const leadIn = item(format(template), 'Lead-in Paragraph');
+      leadIn.click(leadIn, null, mouse);
+      leadIn.click(leadIn, null, menuReturn);
+      leadIn.click(leadIn, null, { triggeredByAccelerator: true, altKey: true, ...cmd(platform) });
+      assert.deepEqual(template.sent, ['leadIn', 'leadIn'], 'the page already answered ⌥⌘Enter');
     });
 
     test(`a script element's own key is the page's too (${platform})`, () => {

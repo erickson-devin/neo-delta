@@ -875,6 +875,13 @@ body.paged #paper:not(.script) #tp-author { font-size: calc(14px * var(--page-zo
 /* Flush paragraphs (⇧Enter): prose with no first-line indent — a report,
    a list, an email inside the story */
 .chapter-body p.flush { text-indent: 0 !important; }
+/* Lead-in paragraphs (⌥⌘Enter): what stands between a chapter's heading and
+   its story — "Ten years earlier", a dateline, a page of a letter. Italic,
+   flush, a little air between them and the story, and never the drop cap
+   (openingPara in app.js passes over them) */
+.chapter-body p.lead-in { text-indent: 0 !important; }
+.chapter-body p.lead-in + p.lead-in { margin-top: 0.5em; }
+.chapter-body p.lead-in + p:not(.lead-in) { margin-top: 1.6em; }
 /* a poetry paragraph is one italic; emphasis inside it stands upright, as
    typesetters set it (and as every export does, see paraRuns in app.js) */
 .chapter-body i i { font-style: normal; }

@@ -28,12 +28,13 @@ test('a chapter reads as the alignment most of its prose is set in', () => {
   assert.equal(chapterAlign(J('Rain fell.') + '<p>The boats came in.</p>'), '');
 });
 
-test('breaks, ghosts, poetry, flush lines, script lines and empty lines don\'t count', () => {
+test('breaks, ghosts, poetry, flush lines, lead-ins, script lines and empty lines don\'t count', () => {
   const page = J('Rain fell.')
     + '<p class="scene-break">***</p>'
     + '<p class="ghost" data-sec-id="s1">the storm</p>'
     + '<p class="poetry">a line</p><p class="poetry">another</p>'
     + '<p class="flush">Dear Mara,</p>'
+    + '<p class="lead-in">Ten years earlier</p>'
     + '<p class="sp-dialogue">Hello.</p>'
     + '<p><br></p><p> &nbsp;</p><p><b></b></p>';
   assert.equal(chapterAlign(page), 'justify');

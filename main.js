@@ -2402,6 +2402,7 @@ function sendToWindow(msg) {
 // whether typewriter scrolling is on
 let poetryState = false;
 let flushState = false;
+let leadInState = false;
 // A script open in the window: the Format menu offers its elements (the
 // keys are the editor's own, ⌘1–⌘7), and Export its two ways out
 let scriptState = { on: false, element: null, underline: false, contd: true };
@@ -2435,6 +2436,12 @@ ipcMain.on('flush:state', (_e, on) => {
   on = !!on;
   if (on === flushState) return;
   flushState = on;
+  try { buildMenu(); } catch (err) { logError('menu', err); }
+});
+ipcMain.on('leadin:state', (_e, on) => {
+  on = !!on;
+  if (on === leadInState) return;
+  leadInState = on;
   try { buildMenu(); } catch (err) { logError('menu', err); }
 });
 ipcMain.on('typewriter:state', (_e, on) => {
@@ -2845,6 +2852,14 @@ function buildMenu() {
           ...pageKey('CmdOrCtrl+Shift+Enter', () => sendToWindow({ type: 'poetry' })),
           type: 'checkbox',
           checked: poetryState
+        },
+        {
+          more: true,
+          visible: !scriptState.on,
+          label: t('Lead-in Paragraph'),
+          ...pageKey('CmdOrCtrl+Alt+Enter', () => sendToWindow({ type: 'leadIn' })),
+          type: 'checkbox',
+          checked: leadInState
         },
         { type: 'separator' },
         // *italic* and **bold** as you type or paste; off for writers who
