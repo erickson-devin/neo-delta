@@ -38,8 +38,8 @@
     "productName": "NEO",
     "publish": {
       "provider": "github",
-      "owner": "hughhowey",
-      "repo": "neo"
+      "owner": "erickson-devin",
+      "repo": "neo-delta"
     },
     "mac": {
       "category": "public.app-category.productivity",

@@ -3213,7 +3213,7 @@ function lookForUpdate() {
 
 // what's on GitHub, for the fallback path and the release link
 async function latestReleaseFromGitHub() {
-  const res = await fetch('https://api.github.com/repos/hughhowey/neo/releases/latest', {
+  const res = await fetch('https://api.github.com/repos/erickson-devin/neo-delta/releases/latest', {
     headers: { 'User-Agent': 'NEO-App' }
   });
   if (!res.ok) throw new Error('GitHub API returned ' + res.status);
